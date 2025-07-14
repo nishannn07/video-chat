@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vintage Video Chat</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Vintage Video Chat</h1>
+            <p class="subtitle">Connect with strangers around the world</p>
+            <p class="user-count" id="userCount">
+                <span id="userCountNumber">...</span> users online
+            </p>
+        </header>
+
+        <main class="main-content">
+            <div class="video-container" id="videoContainer">
+                <div class="video-wrapper">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <label class="video-label">You</label>
+                </div>
+                <div class="video-wrapper">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <label class="video-label">Stranger</label>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startBtn" class="btn btn-primary">Start Video Chat</button>
+                <button id="nextBtn" class="btn btn-secondary" style="display: none;">Next Stranger</button>
+                <button id="endBtn" class="btn btn-danger" style="display: none;">End Chat</button>
+            </div>
+
+            <div class="status" id="status">
+                <p>Click "Start Video Chat" to begin</p>
+            </div>
+        </main>
+    </div>
+
+    <div id="noUsersModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>No Users Online</h2>
+            </div>
+            <div class="modal-body">
+                <p>Sorry, there are no other users online right now. Please try again later.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="tryAgainBtn" class="btn btn-primary">Try Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
