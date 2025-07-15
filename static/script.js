@@ -1,3 +1,7 @@
+//
+// vintage-video-chat/static/script.js
+//
+
 document.addEventListener("DOMContentLoaded", () => {
   console.log("DOM loaded, initializing vintage video chat...");
   new VintageVideoChat();
@@ -14,8 +18,6 @@ class VintageVideoChat {
     this.status = document.getElementById("status");
     this.noUsersModal = document.getElementById("noUsersModal");
     this.tryAgainBtn = document.getElementById("tryAgainBtn");
-
-    // NEW: Get the user count element
     this.userCountNumber = document.getElementById("userCountNumber");
 
     this.localStream = null;
@@ -29,7 +31,7 @@ class VintageVideoChat {
   initializeEventListeners() {
     this.startBtn.addEventListener("click", () => this.startVideoChat());
     this.nextBtn.addEventListener("click", () => this.findNextStranger());
-    this.endBtn.addEventListener("click", () => this.endChat(true));
+    this.endBtn.addEventListener("click", () => this.endChat(true)); // User initiated end
     this.tryAgainBtn.addEventListener("click", () => this.hideNoUsersModalAndRetry());
   }
 
@@ -38,14 +40,11 @@ class VintageVideoChat {
       console.log("Connected to server with SID:", this.socket.id);
       this.updateStatus('Click "Start Video Chat" to begin');
     });
-    
-    // NEW: Listen for the user count update
+
     this.socket.on('user_count_update', (data) => {
         console.log(`User count updated: ${data.count}`);
         this.userCountNumber.textContent = data.count;
     });
-
-    // ... (the rest of your initializeSocketEvents function remains the same) ...
 
     this.socket.on("waiting_for_match", () => {
       this.updateStatus("Searching for a stranger...", true);
@@ -56,16 +55,18 @@ class VintageVideoChat {
       if (this.isConnecting) return;
       this.isConnecting = true;
       this.updateStatus("Stranger found! Connecting...", true);
-      this.createPeerConnection();
-      this.makeOffer();
+      this.createPeerConnection().then(() => {
+        this.makeOffer();
+      });
     });
 
     this.socket.on("offer", (data) => {
       console.log("Received offer");
       if (this.isConnecting) return;
       this.isConnecting = true;
-      this.createPeerConnection();
-      this.handleOffer(data);
+      this.createPeerConnection().then(() => {
+        this.handleOffer(data);
+      });
     });
 
     this.socket.on("answer", (data) => {
@@ -80,16 +81,15 @@ class VintageVideoChat {
 
     this.socket.on("user_disconnected", () => {
       this.updateStatus("Stranger has disconnected. Find another?");
-      this.endChat(false);
+      this.endChat(false); // Not user initiated
     });
 
     this.socket.on("chat_ended", () => {
       this.updateStatus("Chat ended. Find another stranger?");
-      this.endChat(false);
+      this.endChat(false); // Not user initiated
     });
   }
 
-  // ... (the rest of your script.js methods remain the same) ...
   async startVideoChat() {
     try {
       this.updateStatus("Accessing camera and microphone...", true);
@@ -117,7 +117,7 @@ class VintageVideoChat {
   }
 
   findNextStranger() {
-    this.endChat(false); // End current connection without resetting fully
+    this.endChat(false);
     this.findStranger();
   }
 
@@ -159,15 +159,24 @@ class VintageVideoChat {
     this.updateStatus('Click "Start Video Chat" to begin');
   }
 
-  createPeerConnection() {
+  async createPeerConnection() {
     if (this.peerConnection) {
-        console.log("Peer connection already exists.");
         return;
     }
-    console.log("Creating new peer connection...");
-    const configuration = {
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    };
+    console.log("Fetching ICE servers and creating peer connection...");
+
+    let iceServers = [{ urls: "stun:stun.l.google.com:19302" }]; // Default fallback
+    try {
+        const response = await fetch('/api/get-ice-servers');
+        if (response.ok) {
+            iceServers = await response.json();
+            console.log("Successfully fetched ICE servers from backend:", iceServers);
+        }
+    } catch (error) {
+        console.error("Could not fetch ICE servers, using default.", error);
+    }
+    
+    const configuration = { iceServers: iceServers };
     this.peerConnection = new RTCPeerConnection(configuration);
 
     if (this.localStream) {
