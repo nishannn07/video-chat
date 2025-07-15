@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from twilio.rest import Client
 import uuid
 import logging
 import os
@@ -8,17 +7,10 @@ import os
 # --- Basic Flask App Setup ---
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__, static_folder='static', template_folder='templates')
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a-very-secret-key-for-dev')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-12345')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# --- Twilio Configuration ---
-# Securely loads credentials from environment variables set in the hosting platform (e.g., Render).
-# The application will not expose these keys in the code.
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-
 # --- In-Memory Data Stores ---
-# These track users and rooms. For a larger app, you might use a database like Redis.
 waiting_users = []
 active_rooms = {}  # room_id -> {user1_sid, user2_sid}
 user_to_room = {}  # user_sid -> room_id
@@ -39,25 +31,46 @@ def index():
 @app.route('/api/get-ice-servers')
 def get_ice_servers():
     """
-    API endpoint to fetch STUN/TURN server credentials from Twilio.
-    This is called by the frontend to ensure reliable P2P connections.
+    API endpoint to provide STUN/TURN servers for WebRTC connections.
+    Uses reliable public servers that work consistently.
     """
-    # Check if Twilio credentials are provided in the environment.
-    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-        logging.warning("Twilio credentials not set. Using fallback STUN server.")
-        # Provide a public STUN server as a fallback.
-        return jsonify([{"urls": "stun:stun.l.google.com:19302"}])
-        
-    try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        # Fetch a fresh token from Twilio. This includes a list of STUN and TURN servers.
-        token = client.tokens.create()
-        logging.info("Successfully fetched ICE servers from Twilio.")
-        return jsonify(token.ice_servers)
-    except Exception as e:
-        logging.error(f"Failed to fetch ICE servers from Twilio: {e}")
-        # Provide a public STUN server as a fallback if the API call fails.
-        return jsonify([{"urls": "stun:stun.l.google.com:19302"}])
+    # Use multiple reliable public STUN/TURN servers
+    ice_servers = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+        {"urls": "stun:stun2.l.google.com:19302"},
+        {"urls": "stun:stun3.l.google.com:19302"},
+        {"urls": "stun:stun4.l.google.com:19302"},
+        # Free TURN servers for users behind NAT
+        {
+            "urls": "turn:openrelay.metered.ca:80",
+            "username": "openrelayproject",
+            "credential": "openrelayproject"
+        },
+        {
+            "urls": "turn:openrelay.metered.ca:443",
+            "username": "openrelayproject", 
+            "credential": "openrelayproject"
+        },
+        {
+            "urls": "turn:openrelay.metered.ca:443?transport=tcp",
+            "username": "openrelayproject",
+            "credential": "openrelayproject"
+        }
+    ]
+    
+    logging.info("Providing ICE servers for WebRTC connection")
+    return jsonify(ice_servers)
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'connected_users': len(connected_clients),
+        'active_rooms': len(active_rooms),
+        'waiting_users': len(waiting_users)
+    })
 
 # --- SocketIO Event Handlers ---
 @socketio.on('connect')
@@ -140,8 +153,6 @@ def end_chat():
             del active_rooms[room_id]
 
 # --- WebRTC Signaling Relays ---
-# These handlers simply relay WebRTC signals (offer, answer, candidates)
-# from one user to the other user in their private room.
 def handle_webrtc_event(event_name, data):
     user_id = request.sid
     if user_id in user_to_room:
@@ -162,7 +173,5 @@ def handle_ice_candidate(data):
 
 # --- Main Entry Point ---
 if __name__ == '__main__':
-    # This block is for local development only.
-    # The 'host' parameter makes the server accessible on your local network.
     logging.info("Starting Flask-SocketIO server for local development.")
     socketio.run(app, host='0.0.0.0', port=5001, debug=True)
